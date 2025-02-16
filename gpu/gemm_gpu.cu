@@ -3,6 +3,10 @@
 
 #define NUM_RUNS 10
 
+#define O1_BLOCK_SIZE 16
+#define O2_TILE_WIDTH 16
+#define O3_TILE_WIDTH 32
+
 #define CUDA_CHECK(func)                                                     	   \
 	do {                                                                           \
 		cudaError_t status = (func);                                               \
@@ -104,24 +108,119 @@ void gemm_gpu_o0(float* A, float* B, float* C, int M, int N, int K)
 
 // The scafolding for optimized GEMM implementations
 __global__ void gemm_gpu_o1_kernel(float* A, float* B, float *C, int M, int N, int K) {
+	dim3 blockSize(O1_BLOCK_SIZE, O1_BLOCK_SIZE, 1);
+	dim3 gridSize(ceil((float)M / O1_BLOCK_SIZE), ceil((float)N / O1_BLOCK_SIZE), 1);
+
+	gemm_gpu_o1_kernel<<<gridSize, blockSize>>>(A, B, C, M, N, K);
 }
 void gemm_gpu_o1(float* A, float* B, float* C, int M, int N, int K)
 {
-	// Init block and grid size
+	int row = blockIdx.x * O1_BLOCK_SIZE + threadIdx.x;
+	int col = blockIdx.y * O1_BLOCK_SIZE + threadIdx.y;
+
+	if (row < M && col < N) {
+		float out = 0;
+		for(int i=0; i<K; i++) {
+			out += A[row * K + i] * B[col + i * N];
+		}
+		C[row * N + col] = out;
+	} 
 }
 
 __global__ void gemm_gpu_o2_kernel(float* A, float* B, float *C, int M, int N, int K) {
+	dim3 blockSize(O2_TILE_WIDTH, O2_TILE_WIDTH, 1);
+	dim3 gridSize(ceil((float)M / O2_TILE_WIDTH), ceil((float)N / O2_TILE_WIDTH));
+	gemm_gpu_o2_kernel<<<gridSize, blockSize>>>(A, B, C, M, N, K);
 }
 void gemm_gpu_o2(float* A, float* B, float* C, int M, int N, int K)
 {
-	// Init block and grid size
+	__shared__ float tileA[O2_TILE_WIDTH][O2_TILE_WIDTH];
+	__shared__ float tileB[O2_TILE_WIDTH][O2_TILE_WIDTH];
+	
+	int tx = threadIdx.x;
+	int ty = threadIdx.y;
+
+	int row = blockIdx.x * O2_TILE_WIDTH + tx;
+	int col = blockIdx.y * O2_TILE_WIDTH + ty;
+
+	for(int k=0; k<ceil((float)K / O2_TILE_WIDTH); k++) {
+		int rowA = row;
+		int colA = k * O2_TILE_WIDTH + ty;
+
+		int rowB = k * O2_TILE_WIDTH + tx;
+		int colB = col;
+
+		if (rowA < M && colA < K) {
+			tileA[tx][ty] = A[rowA * K + colA];
+		} else {
+			tileA[tx][ty] = 0.0;
+		}
+
+		if (rowB < K && colB < N) {
+			tileB[tx][ty] = B[rowB * N + colB];
+		} else {
+			tileB[tx][ty] = 0.0;
+		}
+		__syncthreads();
+
+		float out = 0;
+		for(int q=0; q<O2_TILE_WIDTH; q++) {
+			out += tileA[tx][q] * tileB[q][ty];
+		}
+		 __syncthreads();
+
+		if (row < M && col < N) {
+			C[row * N + col] = out;
+		}
+	}
 }
 
 __global__ void gemm_gpu_o3_kernel(float* A, float* B, float *C, int M, int N, int K) {
+	__shared__ float tileA[O3_TILE_WIDTH][O3_TILE_WIDTH];
+	__shared__ float tileB[O3_TILE_WIDTH][O3_TILE_WIDTH];
+	
+	int tx = threadIdx.x;
+	int ty = threadIdx.y;
+
+	int row = blockIdx.x * O3_TILE_WIDTH + tx;
+	int col = blockIdx.y * O3_TILE_WIDTH + ty;
+
+	for(int k=0; k<ceil((float)K / O3_TILE_WIDTH); k++) {
+		int rowA = row;
+		int colA = k * O3_TILE_WIDTH + ty;
+
+		int rowB = k * O3_TILE_WIDTH + tx;
+		int colB = col;
+
+		if (rowA < M && colA < K) {
+			tileA[tx][ty] = A[rowA * K + colA];
+		} else {
+			tileA[tx][ty] = 0.0;
+		}
+
+		if (rowB < K && colB < N) {
+			tileB[tx][ty] = B[rowB * N + colB];
+		} else {
+			tileB[tx][ty] = 0.0;
+		}
+		__syncthreads();
+
+		float out = 0;
+		for(int q=0; q<O3_TILE_WIDTH; q++) {
+			out += tileA[tx][q] * tileB[q][ty];
+		}
+		 __syncthreads();
+
+		if (row < M && col < N) {
+			C[row * N + col] = out;
+		}
+	}
 }
 void gemm_gpu_o3(float* A, float* B, float* C, int M, int N, int K)
 {
-	// Init block and grid size
+	dim3 blockSize(O3_TILE_WIDTH, O3_TILE_WIDTH, 1);
+	dim3 gridSize(ceil((float)M / O3_TILE_WIDTH), ceil((float)N / O3_TILE_WIDTH));
+	gemm_gpu_o3_kernel<<<gridSize, blockSize>>>(A, B, C, M, N, K);
 }
 
 
