@@ -2,6 +2,7 @@
 #include "../include/utils.h"
 
 #define NUM_RUNS 2
+#define TILE_WIDTH 400
 
 #define CHECK(name) \
   std::cout << "checking " << #name << std::endl;		\
@@ -45,11 +46,35 @@ void gemm_cpu_o0(float* A, float* B, float *C, int M, int N, int K) {
 // Your optimized implementations go here
 // note that for o4 you don't have to change the code, but just the compiler flags. So, you can use o3's code for that part
 void gemm_cpu_o1(float* A, float* B, float *C, int M, int N, int K) {
-
+	for(int i=0; i<M; i++) {
+		for(int k=0; k<K; k++) {
+			float a_ik = A[i * K + k];
+			for(int j=0; j<N; j++) {
+				C[i * N + j] +=  a_ik * B[k * N + j];
+			}
+		}
+	}
 }
 
 void gemm_cpu_o2(float* A, float* B, float *C, int M, int N, int K) {
+	for (int i=0; i<M; i += TILE_WIDTH) {
+		for(int j=0; j<N; j += TILE_WIDTH) {
+			for(int k=0; k<K; k += TILE_WIDTH) {
 
+				for(int ii=i; ii<i+TILE_WIDTH; ii++) {
+					for(int kk=k; kk<k+TILE_WIDTH; kk++) {
+						float a_ik = ii < M && kk < K ? A[ii * K + kk] : 0.0;
+						for(int jj=j; jj<j+TILE_WIDTH; jj++) {	
+							if (ii < M && jj < N) {
+								float b_kj = jj < N && kk < K ? B[kk * N + jj] : 0.0;
+								C[ii * N + jj] += a_ik * b_kj;
+							}
+						}
+					}
+				}
+			}
+		}
+	}
 }
 
 void gemm_cpu_o3(float* A, float* B, float *C, int M, int N, int K) {
