@@ -78,7 +78,17 @@ void gemm_cpu_o2(float* A, float* B, float *C, int M, int N, int K) {
 }
 
 void gemm_cpu_o3(float* A, float* B, float *C, int M, int N, int K) {
-
+    #pragma omp parallel for collapse(2)
+    for(int i = 0; i < M; i++) {
+        for(int j = 0; j < N; j++) {
+            float sum = 0.0f;
+            #pragma omp simd
+            for(int k = 0; k < K; k++) {
+                sum += A[i * K + k] * B[k * N + j];
+            }
+            C[i * N + j] += sum;
+        }
+    }
 }
 
 
