@@ -77,19 +77,31 @@ void gemm_cpu_o2(float* A, float* B, float *C, int M, int N, int K) {
 	}
 }
 
-void gemm_cpu_o3(float* A, float* B, float *C, int M, int N, int K) {
+void gemm_cpu_o3(float* A, float* B, float* C, int M, int N, int K) {
     #pragma omp parallel for collapse(2)
-    for(int i = 0; i < M; i++) {
-        for(int j = 0; j < N; j++) {
-            float sum = 0.0f;
-            #pragma omp simd
-            for(int k = 0; k < K; k++) {
-                sum += A[i * K + k] * B[k * N + j];
+    for (int i = 0; i < M; i += TILE_WIDTH) {
+        for (int j = 0; j < N; j += TILE_WIDTH) {
+            for (int k = 0; k < K; k += TILE_WIDTH) {
+
+                int i_max = (i + TILE_WIDTH < M) ? (i + TILE_WIDTH) : M;
+                int j_max = (j + TILE_WIDTH < N) ? (j + TILE_WIDTH) : N;
+                int k_max = (k + TILE_WIDTH < K) ? (k + TILE_WIDTH) : K;
+
+                for (int ii = i; ii < i_max; ii++) {
+                    for (int jj = j; jj < j_max; jj++) {
+                        float sum = 0.0f;
+                        #pragma omp simd reduction(+:sum)
+                        for (int kk = k; kk < k_max; kk++) {
+                            sum += A[ii * K + kk] * B[kk * N + jj];
+                        }
+                        C[ii * N + jj] += sum;
+                    }
+                }
             }
-            C[i * N + j] += sum;
         }
     }
 }
+
 
 
 int main(int argc, char* argv[]) {
