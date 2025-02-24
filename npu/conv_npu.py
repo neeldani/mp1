@@ -68,8 +68,36 @@ def conv2d(X, W, bias):
 
     # Process the images in batches
     for b in nl.affine_range(batch_size):
-        raise RuntimeError("Please fill your implementation of computing convolution"
-                           " of X[b] with the weights W and bias b and store the result in X_out[b]")
+        accum_tile = nl.zeros(
+            shape=(out_channels, out_pool_height, out_pool_width),
+            dtype=X.dtype,
+            buffer=nl.sbuf,
+        )
 
+        for i in nl.sequential_range(filter_height):
+            for j in nl.sequential_range(filter_width):
+
+                X_tile = nl.ndarray((nl.par_dim(in_channels), out_height * out_width), dtype=X.dtype, buffer=nl.sbuf)
+                # See https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/nki/programming_model.html#nki-programming-model for optimized indexing
+                for c_in in nl.sequential_range(in_channels):
+                    for h in nl.sequential_range(out_height):
+                        for w in nl.sequential_range(out_width):
+                            flat_idx = h * out_width + w
+                            X_tile[c_in, flat_idx] = nl.load(X[b, c_in, i + h, j + w])
+
+                W_tile = nl.ndarray((out_channels, in_channels), dtype=W.dtype, buffer=nl.sbuf)
+                for c_out in nl.sequential_range(out_channels):
+                    for c_in in nl.affine_range(in_channels):
+                        W_tile[c_out, c_in] = nl.load(W[c_out, c_in, i, j])
+                
+                result = nl.matmul(W_tile, X_tile, transpose_x=True)
+
+                for c_out in nl.sequential_range(out_channels):
+                    for h in nl.sequential_range(out_height):
+                        for w in nl.sequential_range(out_width):
+                            flat_idx = h * out_width + w
+                            accum_tile[c_out, h, w] = nl.add(accum_tile[c_out, h, w], result[c_out, flat_idx])
+    
+        nl.store(X_out[b], value=accum_tile)
     return X_out
 
