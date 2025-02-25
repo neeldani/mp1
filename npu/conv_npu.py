@@ -63,41 +63,87 @@ def conv2d(X, W, bias):
     )
 
     # Various tiling dimensions (You may want to define more of them)
-    c_in_pmax = nl.tile_size.pmax
+    c_in_pmax = 128
+    c_out_pmax = 128
+
     n_tiles_c_in = in_channels // c_in_pmax
+    n_tiles_c_out = out_channels // c_out_pmax 
 
-    # Process the images in batches
-    for b in nl.affine_range(batch_size):
-        accum_tile = nl.zeros(
-            shape=(out_channels, out_pool_height, out_pool_width),
-            dtype=X.dtype,
-            buffer=nl.sbuf,
-        )
+    W_tiled = nl.ndarray(
+        shape=(n_tiles_c_out, nl.par_dim(c_out_pmax), n_tiles_c_in, 128, filter_height, filter_width),
+        dtype=W.dtype,
+        buffer=nl.sbuf
+    )
 
-        for i in nl.sequential_range(filter_height):
-            for j in nl.sequential_range(filter_width):
+    for c_out in nl.affine_range(n_tiles_c_out):         
+        for c_in in nl.affine_range(n_tiles_c_in):
+            W_tiled[c_out, :, c_in, :, :, :] = nl.load(W[nl.ds(c_out * 128, 128), nl.ds(c_in * 128, 128), :, :])
 
-                X_tile = nl.ndarray((nl.par_dim(in_channels), out_height * out_width), dtype=X.dtype, buffer=nl.sbuf)
-                # See https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/nki/programming_model.html#nki-programming-model for optimized indexing
-                for c_in in nl.sequential_range(in_channels):
-                    for h in nl.sequential_range(out_height):
-                        for w in nl.sequential_range(out_width):
-                            flat_idx = h * out_width + w
-                            X_tile[c_in, flat_idx] = nl.load(X[b, c_in, i + h, j + w])
+    W_permute = nl.ndarray(
+        shape=(filter_height, filter_width, n_tiles_c_out, n_tiles_c_in, nl.par_dim(c_out_pmax), c_in_pmax),
+        dtype=W.dtype,
+        buffer=nl.sbuf
+    )
 
-                W_tile = nl.ndarray((out_channels, in_channels), dtype=W.dtype, buffer=nl.sbuf)
-                for c_out in nl.sequential_range(out_channels):
-                    for c_in in nl.affine_range(in_channels):
-                        W_tile[c_out, c_in] = nl.load(W[c_out, c_in, i, j])
-                
-                result = nl.matmul(W_tile, X_tile, transpose_x=True)
+    W_transposed = nl.ndarray(
+        shape=(filter_height, filter_width, n_tiles_c_out, n_tiles_c_in, nl.par_dim(c_in_pmax), c_out_pmax),
+        dtype=W.dtype,
+        buffer=nl.sbuf
+    )
 
-                for c_out in nl.sequential_range(out_channels):
-                    for h in nl.sequential_range(out_height):
-                        for w in nl.sequential_range(out_width):
-                            flat_idx = h * out_width + w
-                            accum_tile[c_out, h, w] = nl.add(accum_tile[c_out, h, w], result[c_out, flat_idx])
+    # nl.device_print(W_tiled.shape)
+    # nl.device_print(W_permute.shape)
+    # nl.device_print(W_transposed.shape)
+
+    for fh in nl.affine_range(filter_height):
+        for fw in nl.affine_range(filter_width):
+            for c_out in nl.affine_range(n_tiles_c_out):
+                for c_in in nl.affine_range(n_tiles_c_in):
+                    W_permute[fh, fw, c_out, c_in] = nl.copy(W_tiled[c_out, :, c_in, :, fh, fw])
+                    W_transposed[fh, fw, c_out, c_in] = nisa.nc_transpose(W_permute[fh, fw, c_out, c_in])
+
+    # nl.device_print(W_permute[0])
     
-        nl.store(X_out[b], value=accum_tile)
-    return X_out
+    output_tile_height = 2
+    input_tile_height = output_tile_height + filter_height - 1
 
+    n_tiles_h = out_height // output_tile_height
+
+    for b in nl.affine_range(batch_size):
+        for tile_h in nl.affine_range(n_tiles_h):
+            X_tile = nl.ndarray(shape=(n_tiles_c_in, nl.par_dim(c_in_pmax), input_tile_height, input_width), 
+                dtype=X[b].dtype, 
+                buffer=nl.sbuf)
+
+            for c_in in nl.affine_range(n_tiles_c_in):
+                # X_tile = nl.load(X[b, c_in * 128: c_in * 128 + 128, tile_h * output_tile_height: tile_h * output_tile_height + input_tile_height, :])
+                X_tile[c_in, :, :, :] = nl.load(X[b, nl.ds(c_in * 128, 128), nl.ds(tile_h * output_tile_height, input_tile_height), :])
+            
+            for c_out in nl.affine_range(n_tiles_c_out):
+                
+                output_tile = nl.ndarray(shape=(nl.par_dim(c_out_pmax), output_tile_height, out_width), 
+                    dtype=X_out[b].dtype, 
+                    buffer=nl.sbuf)
+                
+                for out_row in nl.affine_range(output_tile_height):
+                    acc_tile = nl.zeros((nl.par_dim(c_out_pmax), out_width), nl.float32, buffer=nl.psum)
+                
+                    for i in nl.affine_range(filter_height):
+                        for j in nl.affine_range(filter_width):
+                            for c_in in nl.affine_range(n_tiles_c_in):
+                                x_slice = X_tile[c_in, :, out_row + i, j : j + out_width]
+                                w_slice = W_transposed[i, j, c_out, c_in, :, :]
+                                acc_tile += nl.matmul(w_slice, x_slice, transpose_x=True)
+                    
+                    output_tile[:, out_row, :] = acc_tile
+
+                bias_tile = nl.load(bias[nl.ds(c_out * 128, 128)]).reshape((128, 1))
+                output_tile = nisa.tensor_scalar(output_tile, np.add, bias_tile)
+                
+                h_start = tile_h * output_tile_height
+                h_end = h_start + output_tile_height
+                nl.store(
+                    X_out[b, nl.ds(c_out * 128, 128), h_start : h_end, :],
+                    value=output_tile,
+                )
+    return X_out
