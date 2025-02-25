@@ -227,22 +227,22 @@ void gemm_gpu_o3(float* A, float* B, float* C, int M, int N, int K)
 	gemm_gpu_o3_kernel<<<gridSize, blockSize>>>(A, B, C, M, N, K);
 }
 
-__host__ void gemm_gpu_ec(float* A, float* B, float* C, int M, int N, int K)
-{
-	cublasHandle_t handle;
-    cublasCreate(&handle);
+// __host__ void gemm_gpu_ec(float* A, float* B, float* C, int M, int N, int K)
+// {
+// 	cublasHandle_t handle;
+//     cublasCreate(&handle);
     
-    float alpha = 1.0f, beta = 1.0f;
-    cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, 
-                N, M, K, 
-                &alpha, 
-                B, N, 
-                A, K, 
-                &beta, 
-                C, N);
+//     float alpha = 1.0f, beta = 1.0f;
+//     cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, 
+//                 N, M, K, 
+//                 &alpha, 
+//                 B, N, 
+//                 A, K, 
+//                 &beta, 
+//                 C, N);
     
-    cublasDestroy(handle);
-}
+//     cublasDestroy(handle);
+// }
 
 int main(int argc, char* argv[]) {
 	if (argc < 3) {
@@ -266,18 +266,18 @@ int main(int argc, char* argv[]) {
         // Check if implementation is correct
 	auto ref = Ref();
 	float* refC = new float[Ref::M * Ref::N]();
- 	// CHECK(gemm_gpu_o0)
+ 	CHECK(gemm_gpu_o0)
 	CHECK(gemm_gpu_o1)
 	CHECK(gemm_gpu_o2)
 	CHECK(gemm_gpu_o3)
-	CHECK(gemm_gpu_ec)
+	// CHECK(gemm_gpu_ec)
 
 	// Actual run
- 	// TIME(gemm_gpu_o0)
+ 	TIME(gemm_gpu_o0)
 	TIME(gemm_gpu_o1)
 	TIME(gemm_gpu_o2)
 	TIME(gemm_gpu_o3)
-	TIME(gemm_gpu_ec)
+	// TIME(gemm_gpu_ec)
 
 	cudaFreeHost(A);
 	cudaFreeHost(B);
