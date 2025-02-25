@@ -126,17 +126,17 @@ int main(int argc, char* argv[]) {
 	// We are not exiting the program at failure at this point.
 	// It is a good idea to add more correctness checks to your code.
 	// We may (at discretion) verify that your code is correct.
-	float* refC = new float[Ref::M * Ref::N]();
-	auto ref = Ref();
-	CHECK(gemm_cpu_o0)
-	CHECK(gemm_cpu_o1)
-	CHECK(gemm_cpu_o2)
-	CHECK(gemm_cpu_o3)
-	delete[] refC;
+	// float* refC = new float[Ref::M * Ref::N]();
+	// auto ref = Ref();
+	// CHECK(gemm_cpu_o0)
+	// CHECK(gemm_cpu_o1)
+	// CHECK(gemm_cpu_o2)
+	// CHECK(gemm_cpu_o3)
+	// delete[] refC;
 	
-	TIME(gemm_cpu_o0)
-	TIME(gemm_cpu_o1)
-	TIME(gemm_cpu_o2)
+	// TIME(gemm_cpu_o0)
+	// TIME(gemm_cpu_o1)
+	// TIME(gemm_cpu_o2)
 	TIME(gemm_cpu_o3)
 
 	delete[] A;

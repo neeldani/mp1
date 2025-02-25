@@ -1,3 +1,6 @@
+#include <cuda_runtime.h>
+#include <cublas_v2.h>
+
 #include "../include/utils.h"
 #include <cuda_runtime.h>
 
@@ -223,6 +226,28 @@ void gemm_gpu_o3(float* A, float* B, float* C, int M, int N, int K)
 	gemm_gpu_o3_kernel<<<gridSize, blockSize>>>(A, B, C, M, N, K);
 }
 
+__global__ void gemm_gpu_ec_kernel(float* A, float* B, float* C, int M, int N, int K) {
+    cublasHandle_t handle;
+    cublasCreate(&handle);
+    
+    float alpha = 1.0f, beta = 1.0f;
+    cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, 
+                N, M, K, 
+                &alpha, 
+                B, N, 
+                A, K, 
+                &beta, 
+                C, N);
+    
+    cublasDestroy(handle);
+}
+
+void gemm_gpu_ec(float* A, float* B, float* C, int M, int N, int K)
+{
+	dim3 blockSize(O3_TILE_WIDTH, O3_TILE_WIDTH, 1);
+	dim3 gridSize(ceil((float)M / O3_TILE_WIDTH), ceil((float)N / O3_TILE_WIDTH));
+	gemm_gpu_o3_kernel<<<gridSize, blockSize>>>(A, B, C, M, N, K);
+}
 
 
 int main(int argc, char* argv[]) {
@@ -251,12 +276,14 @@ int main(int argc, char* argv[]) {
 	CHECK(gemm_gpu_o1)
 	CHECK(gemm_gpu_o2)
 	CHECK(gemm_gpu_o3)
+	CHECK(gemm_gpu_ec)
 
 	// Actual run
  	TIME(gemm_gpu_o0)
 	TIME(gemm_gpu_o1)
 	TIME(gemm_gpu_o2)
 	TIME(gemm_gpu_o3)
+	TIME(gemm_gpu_ec)
 
 	cudaFreeHost(A);
 	cudaFreeHost(B);
