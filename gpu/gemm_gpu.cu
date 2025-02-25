@@ -1,4 +1,3 @@
-#include <cuda_runtime.h>
 #include <cublas_v2.h>
 
 #include "../include/utils.h"
@@ -111,13 +110,6 @@ void gemm_gpu_o0(float* A, float* B, float* C, int M, int N, int K)
 
 // The scafolding for optimized GEMM implementations
 __global__ void gemm_gpu_o1_kernel(float* A, float* B, float *C, int M, int N, int K) {
-	dim3 blockSize(O1_BLOCK_SIZE, O1_BLOCK_SIZE, 1);
-	dim3 gridSize(ceil((float)M / O1_BLOCK_SIZE), ceil((float)N / O1_BLOCK_SIZE), 1);
-
-	gemm_gpu_o1_kernel<<<gridSize, blockSize>>>(A, B, C, M, N, K);
-}
-void gemm_gpu_o1(float* A, float* B, float* C, int M, int N, int K)
-{
 	int row = blockIdx.x * O1_BLOCK_SIZE + threadIdx.x;
 	int col = blockIdx.y * O1_BLOCK_SIZE + threadIdx.y;
 
@@ -130,13 +122,15 @@ void gemm_gpu_o1(float* A, float* B, float* C, int M, int N, int K)
 	} 
 }
 
-__global__ void gemm_gpu_o2_kernel(float* A, float* B, float *C, int M, int N, int K) {
-	dim3 blockSize(O2_TILE_WIDTH, O2_TILE_WIDTH, 1);
-	dim3 gridSize(ceil((float)M / O2_TILE_WIDTH), ceil((float)N / O2_TILE_WIDTH));
-	gemm_gpu_o2_kernel<<<gridSize, blockSize>>>(A, B, C, M, N, K);
-}
-void gemm_gpu_o2(float* A, float* B, float* C, int M, int N, int K)
+void gemm_gpu_o1(float* A, float* B, float* C, int M, int N, int K)
 {
+	dim3 blockSize(O1_BLOCK_SIZE, O1_BLOCK_SIZE, 1);
+	dim3 gridSize(ceil((float)M / O1_BLOCK_SIZE), ceil((float)N / O1_BLOCK_SIZE), 1);
+
+	gemm_gpu_o1_kernel<<<gridSize, blockSize>>>(A, B, C, M, N, K);
+}
+
+__global__ void gemm_gpu_o2_kernel(float* A, float* B, float *C, int M, int N, int K) {
 	__shared__ float tileA[O2_TILE_WIDTH][O2_TILE_WIDTH];
 	__shared__ float tileB[O2_TILE_WIDTH][O2_TILE_WIDTH];
 	
@@ -176,6 +170,13 @@ void gemm_gpu_o2(float* A, float* B, float* C, int M, int N, int K)
 			C[row * N + col] = out;
 		}
 	}
+}
+
+void gemm_gpu_o2(float* A, float* B, float* C, int M, int N, int K)
+{
+	dim3 blockSize(O2_TILE_WIDTH, O2_TILE_WIDTH, 1);
+	dim3 gridSize(ceil((float)M / O2_TILE_WIDTH), ceil((float)N / O2_TILE_WIDTH));
+	gemm_gpu_o2_kernel<<<gridSize, blockSize>>>(A, B, C, M, N, K);
 }
 
 __global__ void gemm_gpu_o3_kernel(float* A, float* B, float *C, int M, int N, int K) {
@@ -226,8 +227,9 @@ void gemm_gpu_o3(float* A, float* B, float* C, int M, int N, int K)
 	gemm_gpu_o3_kernel<<<gridSize, blockSize>>>(A, B, C, M, N, K);
 }
 
-__global__ void gemm_gpu_ec_kernel(float* A, float* B, float* C, int M, int N, int K) {
-    cublasHandle_t handle;
+__host__ void gemm_gpu_ec(float* A, float* B, float* C, int M, int N, int K)
+{
+	cublasHandle_t handle;
     cublasCreate(&handle);
     
     float alpha = 1.0f, beta = 1.0f;
@@ -241,14 +243,6 @@ __global__ void gemm_gpu_ec_kernel(float* A, float* B, float* C, int M, int N, i
     
     cublasDestroy(handle);
 }
-
-void gemm_gpu_ec(float* A, float* B, float* C, int M, int N, int K)
-{
-	dim3 blockSize(O3_TILE_WIDTH, O3_TILE_WIDTH, 1);
-	dim3 gridSize(ceil((float)M / O3_TILE_WIDTH), ceil((float)N / O3_TILE_WIDTH));
-	gemm_gpu_o3_kernel<<<gridSize, blockSize>>>(A, B, C, M, N, K);
-}
-
 
 int main(int argc, char* argv[]) {
 	if (argc < 3) {
@@ -272,14 +266,14 @@ int main(int argc, char* argv[]) {
         // Check if implementation is correct
 	auto ref = Ref();
 	float* refC = new float[Ref::M * Ref::N]();
- 	CHECK(gemm_gpu_o0)
+ 	// CHECK(gemm_gpu_o0)
 	CHECK(gemm_gpu_o1)
 	CHECK(gemm_gpu_o2)
 	CHECK(gemm_gpu_o3)
 	CHECK(gemm_gpu_ec)
 
 	// Actual run
- 	TIME(gemm_gpu_o0)
+ 	// TIME(gemm_gpu_o0)
 	TIME(gemm_gpu_o1)
 	TIME(gemm_gpu_o2)
 	TIME(gemm_gpu_o3)
