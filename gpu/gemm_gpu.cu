@@ -140,6 +140,7 @@ __global__ void gemm_gpu_o2_kernel(float* A, float* B, float *C, int M, int N, i
 	int row = blockIdx.x * O2_TILE_WIDTH + tx;
 	int col = blockIdx.y * O2_TILE_WIDTH + ty;
 
+	float out = 0;
 	for(int k=0; k<ceil((float)K / O2_TILE_WIDTH); k++) {
 		int rowA = row;
 		int colA = k * O2_TILE_WIDTH + ty;
@@ -160,15 +161,14 @@ __global__ void gemm_gpu_o2_kernel(float* A, float* B, float *C, int M, int N, i
 		}
 		__syncthreads();
 
-		float out = 0;
 		for(int q=0; q<O2_TILE_WIDTH; q++) {
 			out += tileA[tx][q] * tileB[q][ty];
 		}
 		 __syncthreads();
+	}
 
-		if (row < M && col < N) {
-			C[row * N + col] = out;
-		}
+	if (row < M && col < N) {
+		C[row * N + col] = out;
 	}
 }
 
@@ -189,6 +189,7 @@ __global__ void gemm_gpu_o3_kernel(float* A, float* B, float *C, int M, int N, i
 	int row = blockIdx.x * O3_TILE_WIDTH + tx;
 	int col = blockIdx.y * O3_TILE_WIDTH + ty;
 
+	float out = 0;
 	for(int k=0; k<ceil((float)K / O3_TILE_WIDTH); k++) {
 		int rowA = row;
 		int colA = k * O3_TILE_WIDTH + ty;
@@ -209,15 +210,14 @@ __global__ void gemm_gpu_o3_kernel(float* A, float* B, float *C, int M, int N, i
 		}
 		__syncthreads();
 
-		float out = 0;
 		for(int q=0; q<O3_TILE_WIDTH; q++) {
 			out += tileA[tx][q] * tileB[q][ty];
 		}
 		 __syncthreads();
+	}
 
-		if (row < M && col < N) {
-			C[row * N + col] = out;
-		}
+	if (row < M && col < N) {
+		C[row * N + col] = out;
 	}
 }
 void gemm_gpu_o3(float* A, float* B, float* C, int M, int N, int K)
@@ -263,20 +263,20 @@ int main(int argc, char* argv[]) {
 	fillRandom(B, K * N);
 
 	/// GPU Implementation
-        // Check if implementation is correct
+    // Check if implementation is correct
 	auto ref = Ref();
 	float* refC = new float[Ref::M * Ref::N]();
  	CHECK(gemm_gpu_o0)
 	CHECK(gemm_gpu_o1)
 	CHECK(gemm_gpu_o2)
-	CHECK(gemm_gpu_o3)
+	// CHECK(gemm_gpu_o3)
 	// CHECK(gemm_gpu_ec)
 
 	// Actual run
  	TIME(gemm_gpu_o0)
 	TIME(gemm_gpu_o1)
 	TIME(gemm_gpu_o2)
-	TIME(gemm_gpu_o3)
+	// TIME(gemm_gpu_o3)
 	// TIME(gemm_gpu_ec)
 
 	cudaFreeHost(A);

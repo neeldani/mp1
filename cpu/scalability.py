@@ -1,8 +1,8 @@
 import matplotlib.pyplot as plt
 
 # Data
-size = [1000000, 1000000000, 5000000000, 1000000000000]
-op3_time = [0.108544, 10.9701, 1307.57, 10612.6]
+size = [1000000, 1000000000, 125000000000, 1000000000000]
+op3_time = [3.41751, 1353.72, 96430.6, 763020]
 
 # Create the plot
 plt.figure(figsize=(8, 6))
@@ -21,7 +21,7 @@ plt.grid(True)
 
 # Save the plot
 plt.legend()
-plt.savefig('op3_time_vs_size.png', format='png')
+plt.savefig('op3_cpu_scalability.png', format='png')
 
 # Close the plot to free memory
 plt.close()

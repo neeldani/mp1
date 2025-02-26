@@ -78,10 +78,11 @@ void gemm_cpu_o2(float* A, float* B, float *C, int M, int N, int K) {
 }
 
 void gemm_cpu_o3(float* A, float* B, float* C, int M, int N, int K) {
-    #pragma omp parallel for collapse(2)
-    for (int i = 0; i < M; i += TILE_WIDTH) {
-        for (int j = 0; j < N; j += TILE_WIDTH) {
-            for (int k = 0; k < K; k += TILE_WIDTH) {
+    int i, j, k;
+	#pragma omp parallel for private(i, j, k) shared(A, B, C)
+    for (i = 0; i < M; i += TILE_WIDTH) {
+        for (j = 0; j < N; j += TILE_WIDTH) {
+            for (k = 0; k < K; k += TILE_WIDTH) {
 
                 int i_max = (i + TILE_WIDTH < M) ? (i + TILE_WIDTH) : M;
                 int j_max = (j + TILE_WIDTH < N) ? (j + TILE_WIDTH) : N;
@@ -126,17 +127,17 @@ int main(int argc, char* argv[]) {
 	// We are not exiting the program at failure at this point.
 	// It is a good idea to add more correctness checks to your code.
 	// We may (at discretion) verify that your code is correct.
-	// float* refC = new float[Ref::M * Ref::N]();
-	// auto ref = Ref();
-	// CHECK(gemm_cpu_o0)
-	// CHECK(gemm_cpu_o1)
-	// CHECK(gemm_cpu_o2)
-	// CHECK(gemm_cpu_o3)
-	// delete[] refC;
+	float* refC = new float[Ref::M * Ref::N]();
+	auto ref = Ref();
+	CHECK(gemm_cpu_o0)
+	CHECK(gemm_cpu_o1)
+	CHECK(gemm_cpu_o2)
+	CHECK(gemm_cpu_o3)
+	delete[] refC;
 	
-	// TIME(gemm_cpu_o0)
-	// TIME(gemm_cpu_o1)
-	// TIME(gemm_cpu_o2)
+	TIME(gemm_cpu_o0)
+	TIME(gemm_cpu_o1)
+	TIME(gemm_cpu_o2)
 	TIME(gemm_cpu_o3)
 
 	delete[] A;

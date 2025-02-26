@@ -7,7 +7,7 @@ data = {
     "Size": [1000000, 100000000],
     "op1_speedup": [1.334802117, 1.251852714],
     "op2_speedup": [0.03170678395, 0.617627468],
-    "op3_speedup": [0.4799518188, 3.54886418]
+    "op3_speedup": [1.404938098, 3.178227403]
 }
 
 # Create a DataFrame
@@ -35,7 +35,7 @@ ax.legend()
 
 # Save the plot
 plt.tight_layout()
-plt.savefig('speedup_for_optimizations_updated.png', format='png')
+plt.savefig('cpu_speedup.png', format='png')
 
 # Close the plot to free memory
 plt.close()
